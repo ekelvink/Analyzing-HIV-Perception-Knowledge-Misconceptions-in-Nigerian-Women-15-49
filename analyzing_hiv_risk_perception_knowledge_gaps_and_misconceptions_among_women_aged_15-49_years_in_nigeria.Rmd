@@ -1,0 +1,658 @@
+---
+title: "Analyzing HIV Risk Perception, Knowledge Gaps and Misconceptions among women aged 15 - 49 years in Nigeria."
+output: 
+  prettydoc::html_pretty: 
+    toc: true
+    toc_depth: 5
+theme: material
+author: "Kelvin Emenike"
+date: "2024-04-04"
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading_packages, echo = F, message=FALSE}
+
+#The relevant packages that was used for this analysis include:
+
+pacman::p_load(
+  janitor,    # for data analysis utilities
+  here,       # to set the working directory
+  haven,      # for reading Stata files
+  tidyverse,  # for data manipulation and visualization
+  scales,     # for formatting the percentage
+  plotly,     # for interactive plot
+  datapasta,  
+  leaflet,    # for creating a map
+  sf,
+  htmlwidgets,# for saving my map
+  patchwork,  # for combining plots
+  flextable)  # for a flexible and intuitive table
+```
+
+```{r load_data, echo = F, message=FALSE}
+# Imported the .dta file and added the capstone project variables
+# The code chunk below imports the following variables:
+# 
+# -   Basic Information
+# -   Literacy and Media
+# -   Ever heard of a Sexually Transmitted Infection
+# -   Ever heard of AIDS
+# -   Reduce risk of getting HIV: do not have sex
+# -   Reduce risk of getting HIV: always use condoms
+# -   Reduce risk of getting HIV: have 1 sex partner
+# -   Can get HIV from mosquito bites
+# -   Can get HIV by sharing food with person who has
+# -   A healthy looking person can have HIV
+# -   Condom used during last sex with most recent partner
+# -   Condom used during last sex with 2nd to most recent partner
+# -   Condom used during last sex with 3rd to most recent partner
+# -   Source of condoms used for last sex
+# -   Brand of condom used for last sex
+
+project_raw <-
+  haven::read_dta (here("data/NGIR7BFL.DTA"),
+                   col_select = c(
+                    # Basic information
+                    v006, v007, v009, v010, v012, v013, 
+                    v024, v025, v106, v130, v190,                     
+                    
+                    # Literacy and media
+                    v155, v156, v157, v158, v159, 
+                    
+                    # Knowledge of STIs and AIDS
+                    v750, v751, 
+                    
+                    # Risk of getting HIV
+                    v754bp, v754cp, v754dp, 
+                    
+                    # Mode of transmission
+                    v754jp, v754wp, v756,   
+                    
+                    # Condom used during last sex
+                    v761, v761b, v761c, 
+                    
+                    # Source and brand of condoms used for last sex
+                    v762, v762a                      
+                    ))
+```
+
+```{r rename_data, echo = F, message=FALSE}
+# Rename variables: Assigning descriptive names to the newly imported variables
+project_renamed <- 
+  project_raw %>% 
+  rename(age = v012,
+         age_group = v013,
+         region = v024,
+         urban_rural = v025,
+         highest_educ = v106,
+         religion = v130,
+         literacy = v155,
+         wealth_index = v190,
+        
+         # Rename knowledge of STIs and AIDS
+         heard_of_sti = v750,
+         heard_of_aids = v751, 
+                    
+         # Rename risk of getting HIV
+         rr_do_not_have_sex = v754bp, 
+         rr_always_use_condoms = v754cp, 
+         rr_have_1_sex_partner = v754dp, 
+                    
+         # Rename mode of transmission
+         mt_mosquitoe_bites = v754jp, 
+         mt_sharing_food = v754wp,
+         mt_healthy_looking = v756,
+                    
+         # Rename condom used during last sex
+         cu_most_recent_partner = v761, 
+         cu_2nd_to_most_recent = v761b, 
+         cu_3rd_to_most_recent = v761c, 
+                    
+         # Rename source and brand of condoms used for last sex
+         source_of_condoms = v762, 
+         brand_of_condoms = v762a          
+         )
+```
+
+```{r factor_data, echo = F, message=FALSE}
+# transforming all variables into regular R factors: Add function to convert from labelled data to regular factors
+project_clean <- 
+  project_renamed %>% 
+  haven::as_factor()
+```
+
+# Introduction
+
+Globally, HIV/AIDS remains a significant health challenge, necessitating a thorough understanding of risk perception among populations to develop effective prevention strategies. This capstone outlines a study focusing on the analysis of HIV risk perception, particularly examining knowledge gaps and misconceptions prevalent among **women aged 15 - 45 years** in Nigeria. The study explores the implications of these gaps and misconceptions on individual behaviors and public health interventions.
+
+# Objectives
+
+## Main Objective
+
+To comprehensively analyze HIV risk perception among **women aged 15 - 49years** in Nigeria, focusing on knowledge gaps and misconceptions, and to explore the implications of these perceptions on individual behaviors and public health interventions.
+
+## Specific Objective
+
+-   To assess the level of knowledge among the Nigerian women aged 15 - 49years regarding modes of HIV transmission across a spectrum of wealth index.
+-   To identify misconceptions prevalent in Nigeria women aged 15 - 49years regarding HIV transmission, including non-sexual modes of transmission.
+-   To explore the socio-cultural, educational, and informational factors influencing HIV risk perception among women aged 15 - 49years in Nigeria.
+
+
+# Methodology
+
+The research methodology uses the Nigeria Demographic and Health Surveys to gather comprehensive data and can be accessed [here](https://dhsprogram.com/publications/publication-fr359-dhs-final-reports.cfm). The sample population consisted of women from diverse socio-economic backgrounds, ages, and geographic locations across Nigeria, ensuring a representative sample for analysis. Participants knowledge about Sexually Transmitted Infections (STI) and HIV/AIDS were assessed, as well as risk behaviours and condom use as a preventive method. The quantitative data was analyzed using **R.**
+
+
+# Discussion
+
+## Exploring Fundamental Demographic Characteristics
+
+The fundamental demographic characteristics from the **2018 Demographic and Health Survey** explored in this section include Highest Level of Education by Age Group and Wealth Index respectively. **Table 1.0** shows the distribution of the highest level of education among the respondents (women aged 15 - 49).
+
+
+**Table 1.0**
+```{r flex_table, echo = F, message=FALSE}
+# Summarizing the data
+summary_demog <- 
+  project_clean %>%
+  group_by(highest_educ) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  mutate(percentage = scales::percent(count / sum(count), accuracy = 0.01))
+
+# Adding a total row
+summary_demog_total <- summary_demog %>%
+  summarise(
+    highest_educ = "Total",
+    count = sum(count),
+    percentage = scales::percent(1)
+  )
+
+# Combining the summary with the total row
+summary_demog <- bind_rows(summary_demog, summary_demog_total)
+
+# Creating flextable
+table_summary_demog <- 
+  flextable(summary_demog) %>%
+  set_table_properties(width = 1, layout = "autofit") %>%
+  set_header_labels(
+    highest_educ = "Highest Level of Education",
+    count = "No of Respondents",
+    percentage = "Percentage"
+  )
+
+# Printing flextable
+table_summary_demog
+
+```
+
+This table provides insights into the distribution of respondents based on their highest level of education, with a significant proportion having secondary education, followed by those with no education, primary education, and higher education, respectively
+
+
+
+```{r plot_demog, echo = F, message=FALSE}
+# Plotting age_group and highest_education
+
+# Define custom fill colors
+fill_colors <- c("yes" = "skyblue", 
+                 "no" = "grey", 
+                 "no education" = "brown",
+                 "primary" = "darkgrey",
+                 "secondary" = "skyblue",
+                 "higher" = "darkgreen"
+                 )
+
+plot_demog <- project_clean %>%
+  ggplot(
+    aes(x = age_group, 
+        fill = highest_educ)) +
+  geom_bar() +
+  scale_fill_manual(values = fill_colors) +  # Set custom fill colors
+  labs(
+    x = "Age Group",
+    y = "Highest Education Levels",
+    fill = "Highest Education Levels",
+    title = "Figure 1: Distribution of Highest Education Levels by Age Group",
+    subtitle = "2018 Demographic and Health Survey, Nigeria"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 13L, face = "bold"),
+        plot.subtitle = element_text(size = 10L),
+        legend.position = "right"
+  )
+
+# Convert ggplot to plotly with hidden headers
+interactive_plot <- ggplotly(plot_demog, tooltip = c("x", "fill", "y"), config = list(displayModeBar = FALSE)) %>% 
+    layout(
+    annotations = list(
+      text = "2018 Demographic and Health Survey, Nigeria",
+      xref = "paper",
+      yref = "paper",
+      x = 1,
+      y = 1,
+      xanchor = "right",
+      yanchor = "bottom",
+      showarrow = FALSE
+    )
+  )
+
+# Print interactive plot
+interactive_plot
+
+```
+
+The chart **(Figure 1)** presents the distribution of respondents across different age groups categorized by their highest level of education attainment. The highest number of respondents with no formal education is observed in the age group 25-29, with **2,531** individuals, while the lowest count is seen in the age group 45-49, with **1,657** individuals. Contrary, the age group 15-19 has the highest count of respondents with primary education, totaling **908** individuals, while the lowest count is observed in the age group 40-44, with **895** individuals. Similar to the primary education, the age group 15-19 also has the highest count of respondents with secondary education, with **5,229** individuals, whereas the age group 40-44 has the lowest count, with **1,008** individuals. Lastly, The age group 25-29 has the highest count of respondents with higher education, totaling **965** individuals, while the lowest count is observed in the age group 45-49, with **345** individuals.
+
+Hence, the highest total number of respondents is observed in the age group 15-19, with **8,423** individuals, while the lowest count is seen in the age group 45-49, with **3,891** individuals. Overall, this data provides valuable insights into the educational distribution of respondents across different age groups, highlighting variations in educational attainment levels among different age cohorts.
+
+
+
+**Figure 2**
+```{r wealth_educ, echo = F, message=FALSE}
+
+plot_wealth_educ <- project_clean %>% 
+  select(wealth_index, highest_educ) %>% 
+  ggplot(aes(y = wealth_index, fill = wealth_index)) + 
+  geom_bar() + 
+  facet_grid(~ highest_educ) +
+  labs(
+    title = "Distribution of Wealth Index by Education Level (2018 Demographic and Health Survey, Nigeria)",
+    x = "Highest Education Level",
+    y = "Wealth Index",
+    fill = "Wealth Index"
+  ) +
+  theme(
+    plot.title = element_text(size = 10),  # Adjust the font size of the title
+    legend.title = element_text(size = 10, face = "bold"),  # Adjust the legend title font size and style
+    legend.text = element_text(size = 8),  # Adjust the legend text font size
+    legend.position = "right"  # Adjust the legend position
+  )
+
+# Convert ggplot to plotly with hidden headers
+interactive_plot_2 <- ggplotly(plot_wealth_educ, tooltip = c("x", "fill", "y"), config = list(displayModeBar = FALSE))
+
+# Print interactive plot
+interactive_plot_2
+
+```
+
+This plot provides insights into the distribution of respondents based on their wealth index and highest education level.
+
+Among the respondents falling within the "poorest" wealth index category, the majority had no formal education, with a count of **6,028** individuals. This is followed by those with primary education (**953** individuals) and secondary education (**748** individuals). A smaller proportion of respondents in this category had higher education, with only **18** individuals reported.
+
+Moving to the "poorer" wealth index category, a similar pattern emerges, with the highest count observed among respondents with no formal education (**4,401** individuals). However, compared to the "poorest" category, there is a noticeable increase in the number of individuals with primary and secondary education, with counts of **1,640 and 2,176**, respectively. A small proportion of respondents in this category had higher education, with **129** individuals reported.
+
+Within the "middle" wealth index category, the distribution of respondents across education levels appears more balanced. The count of individuals with no formal education, primary education, secondary education, and higher education are **2,497, 1,846, 4,091, and 425**, respectively.
+
+Moving up the wealth index ladder, in the "richer" category, there is a notable increase in the count of respondents with secondary education (**5,271** individuals), surpassing those with primary education (**1,410** individuals) and no formal education (**1,148** individuals). Additionally, there is a considerable count of individuals with higher education, totaling **1,011** individuals.
+
+Finally, among respondents classified in the "richest" wealth index category, the majority have attained secondary education, with a count of **4,412** individuals. This is followed by those with higher education (**2,759** individuals) and primary education (**534** individuals). The count of respondents with no formal education is notably lower in this category, with only **324** individuals reported.
+
+Overall, the data underscores the interplay between wealth index and education level, highlighting disparities in educational attainment across different socioeconomic strata.
+
+
+
+## Knowledge of STIs and HIV/AIDS
+
+```{r combined_plot, echo=FALSE, message=FALSE}
+
+# Create the first plot for AIDS
+# Plotting wealth_index and heard_of_aids
+
+plot_knowl_aids <- project_clean %>%
+  ggplot(
+    aes(x = wealth_index,
+        fill = heard_of_aids,
+        label = after_stat(count))) +
+  geom_bar(position = "dodge") +
+  geom_text(
+    aes(y = after_stat(count) + 5),  # Adjust the position slightly above the bar
+    stat = "count",
+    size = 3,
+    show.legend = FALSE
+  ) +  
+  scale_fill_manual(values = fill_colors) +  # Set custom fill colors
+  labs(
+    x = "Wealth Index",
+    y = "No of Respondents",
+    fill = "Heard of AIDS",
+    title = "Figure 3: Distribution of Knowledge of STIs and AIDS by Wealth Index",
+    subtitle = "Responses to AIDS"
+  ) +
+  theme(plot.title = element_text(size = 13L, face = "bold"),
+        plot.subtitle = element_text(size = 8L),
+        legend.position = "bottom",
+        legend.title = element_text(size =6),  # Reduce legend title size
+        legend.text = element_text(size = 6)        
+  ) +
+  coord_flip()
+
+# Create the second plot for STI
+# Plotting wealth_index and heard_of_sti
+
+plot_knowl_sti <- 
+  project_clean %>%
+  ggplot(
+    aes(x = wealth_index,
+        fill = heard_of_sti,
+        label = after_stat(count))) +
+  geom_bar(position = "dodge") +
+  geom_text(
+    aes(y = after_stat(count) + 5),  # Adjust the position slightly above the bar
+    stat = "count",
+    size = 3,
+    show.legend = FALSE
+  ) + 
+  scale_fill_manual(values = fill_colors) +  # Set custom fill colors
+  labs(
+    x = "Wealth Index",
+    y = "No of Respondents",
+    fill = "Heard of STIs",
+    title = "",
+    subtitle = "Responses to STI"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 13L, face = "bold"),
+        plot.subtitle = element_text(size = 8L),
+        legend.position = "bottom",
+        legend.title = element_text(size = 6),  # Reduce legend title size
+        legend.text = element_text(size = 6)
+  ) +
+  coord_flip()
+
+
+# Combine plots in a grid
+combined_plot <- plot_knowl_aids + plot_knowl_sti
+
+# Print the combined plot
+combined_plot
+
+
+```
+
+The above plot **(Figure 3)** show insights into the distribution of respondents across different wealth index categories and their awareness of sexually transmitted infections (STIs) and acquired immunodeficiency syndrome (AIDS). Hence, we can deduce the following:
+
+- **Low Awareness:** The data indicates a lack of awareness of STIs and AIDS among respondents across all wealth index categories. This suggests a potential gap in health education or access to information about these health issues within the surveyed population.
+
+- **Uniformity Across Wealth Indexes:** Interestingly, there seems to be no significant variation in the awareness levels of STIs and AIDS across different wealth index categories. This uniformity implies that awareness campaigns and educational initiatives regarding STIs and AIDS may not be effectively reaching individuals across various socioeconomic backgrounds. this is clearly shown in **Figure 4** below.
+
+- **Need for Targeted Education:** To address the lack of awareness observed in this dataset, targeted educational programs and outreach efforts may be necessary to ensure that individuals from all wealth index categories receive essential information about STIs and AIDS.
+
+Overall, this dataset underscores the importance of comprehensive health education and awareness campaigns to promote understanding and prevention of STIs and AIDS across diverse socioeconomic groups.
+
+
+
+```{r combined_plot2, echo=FALSE, message=FALSE}
+
+# Create the first plot for STIs
+plot_knowl_sti_2 <- project_clean %>% 
+  filter(heard_of_sti == "no") %>% 
+  ggplot(aes(x = wealth_index, fill = heard_of_sti, label = after_stat(count))) +
+  geom_bar(position = "dodge") +
+  geom_text(aes(y = after_stat(count) + 5), stat = "count", size = 3, show.legend = FALSE) + 
+  scale_fill_manual(values = fill_colors) +
+  labs(x = "Wealth Index", size = 2, 
+       y = "Number of Respondents", 
+       fill = "Heard of STIs",
+       title = "Figure 4: Distribution of Knowledge of STIs and AIDS by Wealth Index",
+       subtitle = "(among respondents who have not heard of STIs)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 13, face = "bold"),
+        plot.subtitle = element_text(size = 8),
+        legend.title = element_text(size = 6),  # Reduce legend title size
+        legend.text = element_text(size = 6)) +
+  coord_flip()
+
+# Create the second plot for AIDS
+plot_knowl_aids_2 <- project_clean %>% 
+  filter(heard_of_aids == "no") %>% 
+  ggplot(aes(x = wealth_index, fill = heard_of_aids, label = after_stat(count))) +
+  geom_bar(position = "dodge") +
+  geom_text(aes(y = after_stat(count) + 5), stat = "count", size = 3, show.legend = FALSE) + 
+  scale_fill_manual(values = fill_colors) +
+  labs(x = "Wealth Index", size = 2,
+       y = "Number of Respondents", 
+       fill = "Heard of AIDS",
+       title = "",
+       subtitle = "(among respondents who have not heard of AIDS)") +
+  theme_minimal() +
+  theme(plot.title = element_text(size = 8, face = "bold"),
+        plot.subtitle = element_text(size = 8),
+        legend.title = element_text(size = 6),  # Reduce legend title size
+        legend.text = element_text(size = 6)) +
+  coord_flip()
+
+# Combine plots in a grid
+combined_plot_2 <- plot_knowl_sti_2 + plot_knowl_aids_2
+
+# Print the combined plot
+combined_plot_2
+
+```
+
+## Condom use
+
+On condom use, focus was on the brand used by women aged 15 - 49. The map below shows the highest brand of condoms used per the six (6) geopolitical zones of Nigeria. It is evident that **gold circle** happens to be the most brand used across the geopolitical zones. Comprehensively, **Table 2.0** provides further insight into regional preferences for condom brands and highlights the importance of understanding regional variations in sexual health practices. This information could be valuable for public health interventions aimed at promoting safe sexual practices and increasing awareness about condom usage.
+
+```{r table_testing_ground_1, echo = F, message=FALSE}
+
+
+# Define the longitude and latitude values corresponding to each region
+region_data <- tibble(
+  region = c("north central", "north east", "north west", "south east", "south south", "south west"),
+  longitude = c(8.6705, 11.3565, 6.1658, 7.4600, 6.5300, 4.5900),
+  latitude = c(9.0833, 10.1531, 10.1880, 5.9070, 4.8954, 7.3600)
+)
+
+# Add longitude and latitude columns to project_clean based on region
+project_clean <- project_clean %>%
+  left_join(region_data, by = "region") %>% 
+  rename(longitude = longitude,
+         latitude = latitude)
+
+```
+
+
+
+```{r map_condom_use, echo=FALSE, message=FALSE}
+
+# Aggregate data by region and brand of condoms, and calculate the count
+brand_count <- project_clean %>%
+  filter(!is.na(brand_of_condoms)) %>%
+  group_by(region, brand_of_condoms, longitude, latitude) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  arrange(region, desc(count))
+
+# Define the regions of interest
+regions_of_interest <- c("north central", "north east", "north west", "south east", "south south", "south west")
+
+# Filter the data to include only the specified regions
+filtered_brand_count <- brand_count %>%
+  filter(region %in% regions_of_interest) %>%
+  arrange(region, desc(count)) %>%
+  group_by(region) %>%
+  slice(1)  # Keep only the first row for each region
+
+
+# Create a leaflet map
+map <- leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(
+    data = filtered_brand_count,
+    lng = ~longitude,  # Assuming the longitude column contains longitude values
+    lat = ~latitude,  # Assuming the latitude column contains latitude values
+    radius = ~sqrt(count) * 1,  # Adjust the size of markers based on count
+    popup = ~paste("Region: ", region, "<br>",
+                   "Brand of Condoms: ", brand_of_condoms, "<br>",
+                   "Count: ", count),
+    label = ~brand_of_condoms
+  )
+
+# Display the map
+map
+
+```
+
+
+
+**Table 2.0**
+```{r table_testing_ground_2, echo = F, message=FALSE}
+
+
+# Group the data by region and brand of condoms, and count the occurrences
+summary_table <- project_clean %>%
+  filter(!is.na(region) & !is.na(brand_of_condoms)) %>%
+  group_by(region, brand_of_condoms) %>%
+  summarise(count = n()) %>%
+  arrange(region, desc(count))  # Arrange the data by region and count in descending order
+
+# Create flextable
+table_summary_brand <- 
+  flextable(summary_table)
+
+
+table_summary_brand
+
+```
+
+
+
+
+## Misconceptions
+
+```{r mode_of_trans, echo = F, message=FALSE}
+
+# Define custom fill colors
+fill_colors2 <- c(
+  "poorest" = "brown",
+  "poorer" = "darkgrey",
+  "middle" = "skyblue",
+  "richer" = "darkgreen",
+  "richest" = "orange",
+  "yes" = "blue",
+  "no" = "red"
+)
+
+# Create the plot
+plot_mode_of_trans <- project_clean %>% 
+  select(mt_mosquitoe_bites, mt_sharing_food, mt_healthy_looking, wealth_index) %>% 
+  pivot_longer(cols = c(mt_mosquitoe_bites, mt_sharing_food, mt_healthy_looking),
+               names_to = "Mode of Transmission",
+               values_to = "Response") %>%
+  filter(!is.na(Response)) %>%
+  mutate(wealth_index = factor(wealth_index, levels = c("poorest", "poorer", "middle", "richer", "richest")),
+         `Mode of Transmission` = factor(`Mode of Transmission`)) %>%
+  ggplot(aes(x = wealth_index, fill = Response)) + 
+  geom_bar(position = "dodge", stat = "count") + 
+  labs(
+    title = "Figure 5: Distribution of Responses on Mode of Transmission by Wealth Index",
+    x = "Wealth Index",
+    y = "No of Responses",
+    fill = "Responses"
+  ) +
+  scale_fill_manual(values = c("yes" = "blue", "no" = "red"), name = "Response") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 8),
+    legend.position = "right",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  facet_wrap(~ `Mode of Transmission`, scales = "free_y", nrow = 1)
+
+# Convert ggplot to plotly with hidden headers
+interactive_plot_3 <- ggplotly(plot_mode_of_trans, tooltip = c("x", "fill", "y"), config = list(displayModeBar = FALSE))
+
+# Print interactive plot
+interactive_plot_3
+
+
+```
+
+
+The dataset in **Figure 5** provides a comprehensive breakdown of responses regarding the mode of disease transmission across various wealth indices. It encompasses three distinct modes of transmission: **mt_mosquitoe_bites"** - Can get HIV from mosquito bites, **"mt_sharing_food"** - "Can get HIV by sharing food with person who has", and **"mt_healthy_looking"** - A healthy looking person can have HIV, each further delineated by wealth indices ranging from the "poorest" to the "richest".
+
+Upon analysis, it's evident that responses vary significantly across different wealth indices and modes of transmission. For instance, examining the "mt_healthy_looking" mode, individuals within the "richest" wealth index reported the highest count of "yes" responses, indicating a greater awareness or acknowledgment of this mode of transmission compared to other wealth groups. Conversely, the "poorest" wealth index exhibited the lowest count of "yes" responses in the same mode, potentially suggesting a lack of awareness or information regarding disease transmission through seemingly healthy individuals.
+
+Similarly, disparities in responses are observable across different modes of transmission within each wealth index. For instance, within the "middle" wealth index, responses to "mt_mosquitoe_bites" show a notably higher count of "no" responses compared to "mt_sharing_food", implying a varying perception of risk associated with different modes of disease transmission even within the same socioeconomic stratum.
+
+Such insights carry significant implications for public health interventions and policies. Understanding the nuanced differences in perception and knowledge of disease transmission modes across wealth indices can aid in the development of targeted educational campaigns and interventions aimed at addressing gaps in awareness and promoting preventive behaviors. Moreover, identifying disparities in response patterns underscores the importance of equity in access to information and healthcare resources, highlighting the need for tailored interventions to bridge these gaps and ensure equitable health outcomes across all socioeconomic strata.
+
+
+**Table 3.0**
+```{r table_testing_ground_3, echo = F, message=FALSE}
+
+
+# Calculate counts
+table_data <- project_clean %>% 
+  select(mt_mosquitoe_bites, mt_sharing_food, mt_healthy_looking, wealth_index) %>% 
+  pivot_longer(cols = c(mt_mosquitoe_bites, mt_sharing_food, mt_healthy_looking),
+               names_to = "Mode of Transmission",
+               values_to = "Response") %>%
+  filter(!is.na(Response)) %>%
+  mutate(wealth_index = factor(wealth_index, levels = c("poorest", "poorer", "middle", "richer", "richest")),
+         `Mode of Transmission` = factor(`Mode of Transmission`)) %>%
+  group_by(`Mode of Transmission`, wealth_index, Response) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+
+# Create flextable
+table_summary_mt <- 
+  flextable(table_data) %>%
+  set_table_properties(width = 1, layout = "autofit") %>%
+  set_header_labels(
+    `Mode of Transmission` = "Mode of Transmission",
+    wealth_index = "Wealth Index",    
+    no = "No",   
+    yes = "Yes",
+    `don't know` = "I don't Know",
+    Total = "Total"
+  )
+
+# Print flextable
+table_summary_mt
+
+
+```
+
+
+
+# Implications from Survey Data
+
+The implications of the distribution of respondents based on wealth index and highest education level among individuals who have not heard of sexually transmitted infections (STIs) and acquired immunodeficiency syndrome (AIDS) are multifaceted:
+
+- *Health Education Disparities:* The data reveals disparities in health education among different socioeconomic groups. Individuals with lower wealth index categories and lower levels of education may have limited access to information about STIs and AIDS. This knowledge gap could lead to increased vulnerability to these diseases, as individuals may lack awareness of prevention strategies, symptoms, and available healthcare services.
+
+- *Risk of Transmission:* Lack of awareness about STIs and AIDS among certain socioeconomic groups may contribute to higher rates of transmission within those communities. Without adequate knowledge about safe sexual practices, individuals may engage in risky behaviors that increase their likelihood of contracting or transmitting STIs, ultimately perpetuating the cycle of infection within these communities.
+
+- *Barriers to Healthcare Access:* Limited education and economic resources can serve as barriers to accessing healthcare services, including STI testing, treatment, and prevention programs. Individuals from lower wealth index categories and with lower levels of education may face challenges in accessing affordable healthcare services, leading to delays in diagnosis and treatment, as well as reduced adherence to prevention measures.
+
+- *Health Inequities:* The disparities observed in health education and access to healthcare services highlight broader health inequities within society. Addressing these inequities requires targeted interventions aimed at improving health literacy, increasing access to healthcare services, and addressing social determinants of health such as poverty, education, and access to resources.
+
+- *Policy Implications:* The data underscores the need for comprehensive public health policies and programs that prioritize health education and promote equitable access to healthcare services. Policies aimed at addressing socioeconomic disparities, improving education systems, and expanding access to healthcare can help mitigate the impact of STIs and AIDS and promote better health outcomes for all individuals, regardless of their socioeconomic status or level of education.
+
+
+# Conclusion
+
+In conclusion, the implications of the distribution of respondents based on wealth index and highest education level highlight the importance of addressing health disparities and promoting health equity through targeted interventions, policy reforms, and community-based initiatives aimed at improving health literacy and access to healthcare services for all individuals.
+
+
+# Appreciation
+
+I sincere want to express my heartfelt gratitude for the exceptional work **The GRAPH Network** are doing. Your dedication to excellence is truly remarkable, and it is evident in every aspect of your training model. The way you break down each training session into granular components while ensuring it remains easily comprehensible is simply outstanding.
+
+A special acknowledgment goes out to **Kene David Nwosu, Joy Vaz, Camille Beatrice Valera, Santiago Sotelo, and Sabina Rodriguez Velásquez.** Each of you contributes uniquely to my knowledge on **R,** and your collective efforts are truly commendable.
+
+I want to reiterate my deepest appreciation for the incredible work you do. I am grateful to have the opportunity to learn from such a talented team.
+
+Lastly, many thanks to **Heartland Alliance Nigeria** for the growth opportunity.
+
+Thank you!!!
+
+
